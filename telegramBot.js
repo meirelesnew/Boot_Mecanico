@@ -1,15 +1,5 @@
 const TelegramBot = require("node-telegram-bot-api");
-
-const IA_ATIVADA = Boolean(process.env.ANTHROPIC_API_KEY);
-let anthropic = null;
-if (IA_ATIVADA) {
-  const Anthropic = require("@anthropic-ai/sdk");
-  anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-} else {
-  console.warn(
-    "ANTHROPIC_API_KEY nao configurada - perguntas livres no Telegram ficarao desativadas (so /ultimo e alertas vao funcionar)."
-  );
-}
+const { perguntarIA, IA_ATIVADA } = require("./openRouterClient");
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const WEBHOOK_BASE_URL = process.env.TELEGRAM_WEBHOOK_URL; // ex: https://obd-backend-xxxx.onrender.com
@@ -100,7 +90,7 @@ if (bot) {
     if (!IA_ATIVADA) {
       bot.sendMessage(
         msg.chat.id,
-        "Perguntas livres exigem uma chave da Anthropic configurada (ANTHROPIC_API_KEY). Por enquanto, use /ultimo para ver o último diagnóstico."
+        "Perguntas livres exigem uma chave da OpenRouter configurada (OPENROUTER_API_KEY). Por enquanto, use /ultimo para ver o último diagnóstico."
       );
       return;
     }
@@ -111,18 +101,9 @@ if (bot) {
       : "Nenhum diagnostico registrado ainda.";
 
     try {
-      const resposta = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: `Voce e um assistente de manutencao automotiva chamado Mecanico Pessoal. ${contexto}\n\nPergunta do usuario: ${texto}\n\nResponda em portugues do Brasil, curto e direto (max 4 frases), formatado para leitura no Telegram.`,
-          },
-        ],
-      });
-      const textBlock = resposta.content.find((b) => b.type === "text");
-      bot.sendMessage(msg.chat.id, textBlock ? textBlock.text : "Não consegui responder agora.");
+      const systemPrompt = `Voce e um assistente de manutencao automotiva chamado Mecanico Pessoal. ${contexto} Responda em portugues do Brasil, curto e direto (max 4 frases), formatado para leitura no Telegram.`;
+      const resposta = await perguntarIA(systemPrompt, texto);
+      bot.sendMessage(msg.chat.id, resposta || "Não consegui responder agora, tenta de novo em instantes.");
     } catch (err) {
       console.error("Erro ao responder no Telegram:", err.message);
       bot.sendMessage(msg.chat.id, "Ocorreu um erro ao processar sua pergunta.");

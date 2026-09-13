@@ -1,13 +1,14 @@
 # OBD Backend — Mecânico Pessoal
 
-Backend que recebe dados de um scanner OBD2 (via app mobile) e usa a API da Anthropic
-para interpretar códigos de erro (DTC) em linguagem simples.
+Backend que recebe dados de um scanner OBD2 (via app mobile), interpreta códigos de
+erro (DTC) usando uma tabela local gratuita, e opcionalmente usa a OpenRouter (modelos
+gratuitos) para responder perguntas livres via Telegram.
 
 ## Rodando localmente
 
 ```bash
 npm install
-cp .env.example .env   # depois edite e coloque sua ANTHROPIC_API_KEY
+cp .env.example .env   # opcional: preencha OPENROUTER_API_KEY e/ou TELEGRAM_BOT_TOKEN
 npm start
 ```
 
@@ -47,8 +48,10 @@ git push -u origin main
    - **Build Command:** `npm install`
    - **Start Command:** `npm start`
    - **Instance Type:** Free
-5. Em **Environment Variables**, adicione:
-   - `ANTHROPIC_API_KEY` = sua chave da Anthropic
+5. Em **Environment Variables**, adicione (todas opcionais, exceto se quiser Telegram/IA):
+   - `OPENROUTER_API_KEY` = sua chave da OpenRouter (só se quiser perguntas livres)
+   - `TELEGRAM_BOT_TOKEN` = token do seu bot
+   - `TELEGRAM_WEBHOOK_URL` = a própria URL pública deste serviço no Render
 6. Clique em **Create Web Service**
 
 O Render vai te dar uma URL pública, tipo:
@@ -61,8 +64,22 @@ Essa URL é o que o app React Native vai chamar depois, no lugar de `localhost:3
 1. Acesse https://railway.app e conecte com GitHub
 2. **New Project** → **Deploy from GitHub repo**
 3. Selecione o repositório
-4. Em **Variables**, adicione `ANTHROPIC_API_KEY`
+4. Em **Variables**, adicione as mesmas variáveis do Render acima
 5. Railway detecta o `npm start` automaticamente
+
+## Perguntas livres com IA (OpenRouter - grátis)
+
+O `/simulate` e `/obd-data` funcionam 100% sem IA (tabela fixa de códigos DTC). Se quiser
+que o bot também responda perguntas livres no Telegram (ex: "quando devo trocar o óleo?"),
+ative a OpenRouter, que tem modelos gratuitos:
+
+1. Crie uma conta em https://openrouter.ai e gere uma chave em https://openrouter.ai/keys
+2. No `.env` (ou nas variáveis do Render), preencha:
+   - `OPENROUTER_API_KEY` — sua chave
+   - `OPENROUTER_MODEL` — pode deixar `openrouter/free` (escolhe um modelo grátis automaticamente)
+3. Reinicie o servidor
+
+> Modelos gratuitos têm limite de uso (por volta de 20 req/min, 200 req/dia). Pra um assistente pessoal isso é de sobra.
 
 ## Configurando o bot do Telegram
 
