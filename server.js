@@ -96,6 +96,14 @@ app.post("/simulate", async (req, res) => {
 });
 
 /**
+ * Rota simples de "estou vivo" - usada por servicos de monitoramento
+ * (ex: UptimeRobot) pra manter o servidor acordado no plano free do Render.
+ */
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+/**
  * Consulta o ultimo registro salvo.
  */
 app.get("/ultimo", (req, res) => {
