@@ -1,7 +1,15 @@
 const TelegramBot = require("node-telegram-bot-api");
-const Anthropic = require("@anthropic-ai/sdk");
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const IA_ATIVADA = Boolean(process.env.ANTHROPIC_API_KEY);
+let anthropic = null;
+if (IA_ATIVADA) {
+  const Anthropic = require("@anthropic-ai/sdk");
+  anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+} else {
+  console.warn(
+    "ANTHROPIC_API_KEY nao configurada - perguntas livres no Telegram ficarao desativadas (so /ultimo e alertas vao funcionar)."
+  );
+}
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const WEBHOOK_BASE_URL = process.env.TELEGRAM_WEBHOOK_URL; // ex: https://obd-backend-xxxx.onrender.com
@@ -88,6 +96,14 @@ if (bot) {
   bot.on("message", async (msg) => {
     const texto = msg.text || "";
     if (texto.startsWith("/")) return; // comandos ja tratados acima
+
+    if (!IA_ATIVADA) {
+      bot.sendMessage(
+        msg.chat.id,
+        "Perguntas livres exigem uma chave da Anthropic configurada (ANTHROPIC_API_KEY). Por enquanto, use /ultimo para ver o último diagnóstico."
+      );
+      return;
+    }
 
     const registro = getUltimoRegistro();
     const contexto = registro
