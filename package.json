@@ -1,0 +1,20 @@
+{
+  "name": "obd-backend",
+  "version": "1.0.0",
+  "description": "Backend que recebe dados de scanner OBD2 e interpreta codigos de erro com IA",
+  "main": "server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5",
+    "@anthropic-ai/sdk": "^0.32.1",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
