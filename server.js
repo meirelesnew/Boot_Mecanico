@@ -6,6 +6,7 @@ const {
   processarUpdate,
   enviarAlerta,
   registrarFonteDeDados,
+  registrarPerfil,
 } = require("./telegramBot");
 
 const app = express();
@@ -16,6 +17,21 @@ const PORT = process.env.PORT || 3000;
 // Guarda o ultimo registro em memoria (depois trocamos por banco de dados)
 let ultimoRegistro = null;
 registrarFonteDeDados(() => ultimoRegistro);
+
+// Perfil do carro - informacoes fixas que ajudam a interpretar os diagnosticos
+let perfilCarro = { temGNV: false, observacoes: [], kmAtual: null };
+registrarPerfil({
+  getPerfil: () => perfilCarro,
+  setTemGNV: (valor) => {
+    perfilCarro.temGNV = valor;
+  },
+  addObservacao: (texto) => {
+    perfilCarro.observacoes.push({ texto, data: new Date().toISOString() });
+  },
+  setKmAtual: (km) => {
+    perfilCarro.kmAtual = km;
+  },
+});
 
 /**
  * Endpoint que o APP (React Native) vai chamar de verdade,
@@ -37,7 +53,7 @@ app.post("/obd-data", async (req, res) => {
   }
 
   try {
-    const resultado = await interpretDTC(codes, { rpm, coolantTemp, km });
+    const resultado = await interpretDTC(codes, { rpm, coolantTemp, km }, perfilCarro);
 
     ultimoRegistro = {
       codes,
@@ -74,7 +90,7 @@ app.post("/simulate", async (req, res) => {
   };
 
   try {
-    const resultado = await interpretDTC(exemplo.codes, exemplo);
+    const resultado = await interpretDTC(exemplo.codes, exemplo, perfilCarro);
 
     ultimoRegistro = {
       ...exemplo,

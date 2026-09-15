@@ -93,10 +93,15 @@ ative a OpenRouter, que tem modelos gratuitos:
 3. No Telegram, mande `/start` pro seu bot. Ele salva seu `chat_id` automaticamente e confirma a conexão.
 4. A partir daí:
    - `/ultimo` → mostra o último diagnóstico
+   - `/km <numero>` → atualiza a quilometragem atual de verdade (ex: `/km 278860`)
+   - `/gnv` → marca o carro como equipado com GNV (`/gnv off` desativa)
+   - `/obs <texto>` → salva uma observação livre sobre o carro (ex: `/obs pneu dianteiro trocado em ago/2026`)
+   - `/perfil` → mostra o que está salvo (GNV + observações)
    - Qualquer outra mensagem → vai direto pra IA responder
    - Quando `/obd-data` ou `/simulate` gerar urgência **média ou alta**, o bot te avisa sozinho
+   - Se o carro tiver GNV marcado e aparecer um código de sensor de oxigênio (ex: P0130), o diagnóstico já inclui automaticamente o alerta de possível falso positivo
 
-> ⚠️ O `chat_id` fica salvo em memória — se o servidor reiniciar (comum no plano free do Render), você precisa mandar `/start` de novo. Isso entra na lista de "próximos passos" abaixo, pra resolver com banco de dados.
+> ⚠️ O `chat_id` e o perfil do carro (GNV, observações) ficam salvos em memória — se o servidor reiniciar (comum no plano free do Render), essas informações se perdem e você precisa mandar `/start`, `/gnv` e `/obs` de novo. Isso entra na lista de "próximos passos" abaixo, pra resolver com banco de dados.
 
 ## Próximos passos
 
