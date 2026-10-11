@@ -1,13 +1,14 @@
 require("dotenv").config();
 const express = require("express");
 const { interpretDTC } = require("./dtcInterpreter");
-const { decodificarModo03 } = require("./obdDecoder");
+const { decodificarModo03, decodificarDadosVivos } = require("./obdDecoder");
 const {
   configurarWebhook,
   processarUpdate,
   enviarAlerta,
   registrarFonteDeDados,
   registrarPerfil,
+  registrarLeituraViva,
 } = require("./telegramBot");
 
 const app = express();
@@ -18,6 +19,19 @@ const PORT = process.env.PORT || 3000;
 // Guarda o ultimo registro em memoria (depois trocamos por banco de dados)
 let ultimoRegistro = null;
 registrarFonteDeDados(() => ultimoRegistro);
+
+// Ultima leitura de dados ao vivo (RPM, temperatura, velocidade)
+let ultimaLeituraViva = null;
+registrarLeituraViva(() => ultimaLeituraViva);
+
+// Temperatura do motor a partir da qual o bot avisa (graus C)
+const TEMP_ALERTA = 105;
+
+// Protecao opcional por token (?token=...), usada nas rotas do app
+function tokenOk(req) {
+  const esperado = process.env.OBD_TOKEN;
+  return !esperado || req.query.token === esperado;
+}
 
 // Perfil do carro - informacoes fixas que ajudam a interpretar os diagnosticos
 let perfilCarro = { temGNV: false, observacoes: [], kmAtual: null };
@@ -87,8 +101,7 @@ app.post("/obd-data", async (req, res) => {
  * precisa incluir ?token=SEU_TOKEN na URL.
  */
 app.post("/obd-raw", express.text({ type: "*/*" }), async (req, res) => {
-  const tokenEsperado = process.env.OBD_TOKEN;
-  if (tokenEsperado && req.query.token !== tokenEsperado) {
+  if (!tokenOk(req)) {
     return res.status(401).type("text/plain").send("Nao autorizado");
   }
 
@@ -135,6 +148,39 @@ app.post("/obd-raw", express.text({ type: "*/*" }), async (req, res) => {
     console.error("Erro no /obd-raw:", err.message);
     return res.status(500).type("text/plain").send("Falha ao processar a leitura");
   }
+});
+
+/**
+ * Dados ao vivo: o app envia as respostas do ELM327 aos comandos 010C (RPM),
+ * 0105 (temperatura) e 010D (velocidade), separadas por "|".
+ */
+app.post("/obd-live", express.text({ type: "*/*" }), async (req, res) => {
+  if (!tokenOk(req)) {
+    return res.status(401).type("text/plain").send("Nao autorizado");
+  }
+
+  const bruto = typeof req.body === "string" ? req.body : req.body && req.body.raw;
+  const { rpm, coolantTemp, speed } = decodificarDadosVivos(bruto);
+
+  if (rpm === null && coolantTemp === null && speed === null) {
+    return res
+      .status(422)
+      .type("text/plain")
+      .send("Nenhum dado reconhecido. Ligue a ignicao e rode 'Ler codigos' antes.");
+  }
+
+  ultimaLeituraViva = { rpm, coolantTemp, speed, timestamp: new Date().toISOString() };
+
+  if (coolantTemp !== null && coolantTemp >= TEMP_ALERTA) {
+    await enviarAlerta(
+      `🌡️ *Motor quente!* Temperatura em *${coolantTemp} °C* (limite ${TEMP_ALERTA} °C).\nSe o ponteiro estiver alto, pare em local seguro e deixe esfriar.`
+    );
+  }
+
+  const fmt = (v, unid) => (v === null ? "sem dado" : `${v} ${unid}`.trim());
+  return res
+    .type("text/plain")
+    .send(`RPM: ${fmt(rpm, "")} | Temp: ${fmt(coolantTemp, "C")} | Vel: ${fmt(speed, "km/h")}`);
 });
 
 /**

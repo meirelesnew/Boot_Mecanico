@@ -54,6 +54,12 @@ function registrarFonteDeDados(fn) {
   getUltimoRegistro = fn;
 }
 
+// Guarda uma referencia pra "ultima leitura ao vivo" - injetada pelo server.js
+let getLeituraViva = () => null;
+function registrarLeituraViva(fn) {
+  getLeituraViva = fn;
+}
+
 // Guarda funcoes de acesso ao perfil do carro - sera injetado pelo server.js
 let perfilFns = {
   getPerfil: () => ({ temGNV: false, observacoes: [], kmAtual: null }),
@@ -121,6 +127,22 @@ if (bot) {
     bot.sendMessage(msg.chat.id, `📌 Observação salva: "${texto}"`);
   });
 
+  // /vivo - mostra a ultima leitura de dados ao vivo (RPM, temperatura, velocidade)
+  bot.onText(/\/vivo/, (msg) => {
+    const l = getLeituraViva();
+    if (!l) {
+      bot.sendMessage(msg.chat.id, "Nenhuma leitura ao vivo ainda. Use o botão 'Dados ao vivo' no app.");
+      return;
+    }
+    const fmt = (v, unid) => (v === null ? "sem dado" : `${v} ${unid}`.trim());
+    const hora = new Date(l.timestamp).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    bot.sendMessage(
+      msg.chat.id,
+      `📟 *Última leitura ao vivo* (${hora})\n*RPM:* ${fmt(l.rpm, "")}\n*Temperatura:* ${fmt(l.coolantTemp, "°C")}\n*Velocidade:* ${fmt(l.speed, "km/h")}`,
+      { parse_mode: "Markdown" }
+    );
+  });
+
   // /ultimo - mostra o ultimo diagnostico salvo
   bot.onText(/\/ultimo/, (msg) => {
     const registro = getUltimoRegistro();
@@ -172,4 +194,4 @@ if (bot) {
   });
 }
 
-module.exports = { bot, configurarWebhook, processarUpdate, enviarAlerta, registrarFonteDeDados, registrarPerfil };
+module.exports = { bot, configurarWebhook, processarUpdate, enviarAlerta, registrarFonteDeDados, registrarPerfil, registrarLeituraViva };

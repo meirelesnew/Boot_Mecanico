@@ -23,6 +23,7 @@ curl -X POST http://localhost:3000/simulate
 | Método | Rota         | Descrição                                       |
 |--------|--------------|--------------------------------------------------|
 | POST   | /obd-raw     | Recebe o texto bruto do ELM327 (comando `03`), decodifica e avisa no Telegram |
+| POST   | /obd-live    | Recebe RPM, temperatura e velocidade (comandos `010C`, `0105`, `010D`) |
 | POST   | /obd-data    | Recebe dados já decodificados do scanner (codes, rpm, etc.) |
 | POST   | /simulate    | Roda com dados fictícios, sem hardware           |
 | GET    | /ultimo      | Retorna o último diagnóstico salvo               |
@@ -97,6 +98,7 @@ ative a OpenRouter, que tem modelos gratuitos:
    - `/km <numero>` → atualiza a quilometragem atual de verdade (ex: `/km 278860`)
    - `/gnv` → marca o carro como equipado com GNV (`/gnv off` desativa)
    - `/obs <texto>` → salva uma observação livre sobre o carro (ex: `/obs pneu dianteiro trocado em ago/2026`)
+   - `/vivo` → mostra a última leitura ao vivo (RPM, temperatura, velocidade)
    - `/perfil` → mostra o que está salvo (GNV + observações)
    - Qualquer outra mensagem → vai direto pra IA responder
    - Quando `/obd-data` ou `/simulate` gerar urgência **média ou alta**, o bot te avisa sozinho
@@ -115,6 +117,19 @@ curl -X POST "https://SEU-APP.onrender.com/obd-raw?token=SUA_SENHA" --data "43 0
 ```
 
 Defina `OBD_TOKEN` no Render para exigir `?token=...` na URL. Sem isso a rota fica pública.
+
+## Dados ao vivo (/obd-live)
+
+O app manda as 3 respostas do ELM327 separadas por `|`, por exemplo
+`41 0C 0B B8|41 05 84|41 0D 00` (= 750 rpm, 92 °C, 0 km/h):
+
+```bash
+curl -X POST "https://SEU-APP.onrender.com/obd-live?token=SUA_SENHA" --data "41 0C 0B B8|41 05 84|41 0D 00"
+```
+
+Se a temperatura do motor chegar a **105 °C ou mais**, o bot manda um alerta no Telegram
+(limite ajustável na constante `TEMP_ALERTA` do `server.js`). O app só lê **uma vez por toque**
+no botão; leitura contínua exigiria um temporizador no app.
 
 ## Próximos passos
 

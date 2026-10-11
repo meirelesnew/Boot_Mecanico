@@ -70,4 +70,46 @@ function decodificarModo03(bruto) {
   return { codes, valido: true };
 }
 
-module.exports = { decodificarModo03, bytesParaDTC };
+
+/**
+ * Decodifica dados ao vivo (modo 01) do ELM327.
+ * O app envia as respostas separadas por "|", por exemplo:
+ *   "SEARCHING... 41 0C 0B B8|41 05 84|41 0D 00"
+ *
+ *  - 010C (RPM):          41 0C A B -> (A*256 + B) / 4
+ *  - 0105 (temp. motor):  41 05 A   -> A - 40  (graus C)
+ *  - 010D (velocidade):   41 0D A   -> A  (km/h)
+ *
+ * Campos que nao vieram (NO DATA, erro, etc.) ficam null.
+ */
+const PIDS_VIVOS = {
+  "0C": { campo: "rpm", bytes: 2, calc: (a, b) => (a * 256 + b) / 4 },
+  "05": { campo: "coolantTemp", bytes: 1, calc: (a) => a - 40 },
+  "0D": { campo: "speed", bytes: 1, calc: (a) => a },
+};
+
+function decodificarDadosVivos(bruto) {
+  const resultado = { rpm: null, coolantTemp: null, speed: null };
+  if (typeof bruto !== "string") return resultado;
+
+  for (const trecho of bruto.split("|")) {
+    const tokens = trecho
+      .toUpperCase()
+      .split(/\s+/)
+      .filter((t) => /^[0-9A-F]{2}$/.test(t));
+
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const pid = PIDS_VIVOS[tokens[i + 1]];
+      if (tokens[i] !== "41" || !pid) continue;
+
+      const dados = tokens.slice(i + 2, i + 2 + pid.bytes).map((t) => parseInt(t, 16));
+      if (dados.length < pid.bytes) continue;
+
+      resultado[pid.campo] = pid.calc(...dados);
+      break; // usa so a primeira resposta valida de cada trecho
+    }
+  }
+  return resultado;
+}
+
+module.exports = { decodificarModo03, bytesParaDTC, decodificarDadosVivos };
