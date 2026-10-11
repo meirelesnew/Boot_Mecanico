@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const { interpretDTC } = require("./dtcInterpreter");
+const { decodificarModo03 } = require("./obdDecoder");
 const {
   configurarWebhook,
   processarUpdate,
@@ -74,6 +75,65 @@ app.post("/obd-data", async (req, res) => {
   } catch (err) {
     console.error("Erro ao interpretar DTC:", err.message);
     return res.status(500).json({ error: "Falha ao interpretar codigos" });
+  }
+});
+
+/**
+ * Endpoint usado pelo app do App Inventor: recebe o TEXTO BRUTO que o ELM327
+ * devolveu ao comando "03" (ex: "SEARCHING... 43 01 30 00 00 00 00"),
+ * decodifica os codigos e segue o mesmo fluxo do /obd-data.
+ *
+ * Protecao opcional: se a variavel OBD_TOKEN estiver definida, a chamada
+ * precisa incluir ?token=SEU_TOKEN na URL.
+ */
+app.post("/obd-raw", express.text({ type: "*/*" }), async (req, res) => {
+  const tokenEsperado = process.env.OBD_TOKEN;
+  if (tokenEsperado && req.query.token !== tokenEsperado) {
+    return res.status(401).type("text/plain").send("Nao autorizado");
+  }
+
+  // Aceita texto puro (App Inventor) ou, se vier como JSON, o campo "raw"
+  const bruto = typeof req.body === "string" ? req.body : req.body && req.body.raw;
+  const { codes, valido } = decodificarModo03(bruto);
+
+  if (!valido) {
+    return res
+      .status(422)
+      .type("text/plain")
+      .send("Resposta nao reconhecida (sem dados do modo 03). Tente ler de novo.");
+  }
+
+  try {
+    const km = perfilCarro.kmAtual;
+    const resultado = await interpretDTC(codes, { km }, perfilCarro);
+
+    ultimoRegistro = {
+      codes,
+      km,
+      bruto: String(bruto).slice(0, 300),
+      resultado,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (codes.length === 0) {
+      await enviarAlerta("✅ *Leitura do scanner:* nenhum código de falha armazenado.");
+      return res.type("text/plain").send("OK: nenhum codigo de falha");
+    }
+
+    if (resultado.urgency === "medio" || resultado.urgency === "alto") {
+      await enviarAlerta(
+        `⚠️ *Alerta do carro!*\n*Códigos:* ${codes.join(", ")}\n*Diagnóstico:* ${resultado.diagnosis}\n*Urgência:* ${resultado.urgency}`
+      );
+    } else {
+      await enviarAlerta(
+        `ℹ️ *Leitura do scanner:* ${codes.join(", ")}\n*Diagnóstico:* ${resultado.diagnosis}\n*Urgência:* ${resultado.urgency}`
+      );
+    }
+
+    return res.type("text/plain").send(`Codigos: ${codes.join(", ")} | urgencia: ${resultado.urgency}`);
+  } catch (err) {
+    console.error("Erro no /obd-raw:", err.message);
+    return res.status(500).type("text/plain").send("Falha ao processar a leitura");
   }
 });
 

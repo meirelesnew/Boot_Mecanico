@@ -22,7 +22,8 @@ curl -X POST http://localhost:3000/simulate
 
 | Método | Rota         | Descrição                                       |
 |--------|--------------|--------------------------------------------------|
-| POST   | /obd-data    | Recebe dados reais do scanner (codes, rpm, etc.) |
+| POST   | /obd-raw     | Recebe o texto bruto do ELM327 (comando `03`), decodifica e avisa no Telegram |
+| POST   | /obd-data    | Recebe dados já decodificados do scanner (codes, rpm, etc.) |
 | POST   | /simulate    | Roda com dados fictícios, sem hardware           |
 | GET    | /ultimo      | Retorna o último diagnóstico salvo               |
 
@@ -102,6 +103,18 @@ ative a OpenRouter, que tem modelos gratuitos:
    - Se o carro tiver GNV marcado e aparecer um código de sensor de oxigênio (ex: P0130), o diagnóstico já inclui automaticamente o alerta de possível falso positivo
 
 > ⚠️ O `chat_id` e o perfil do carro (GNV, observações) ficam salvos em memória — se o servidor reiniciar (comum no plano free do Render), essas informações se perdem e você precisa mandar `/start`, `/gnv` e `/obs` de novo. Isso entra na lista de "próximos passos" abaixo, pra resolver com banco de dados.
+
+## Rota /obd-raw (usada pelo app do celular)
+
+O app (feito no MIT App Inventor) manda o texto cru que o ELM327 devolve ao comando `03`,
+por exemplo `SEARCHING... 43 01 30 00 00 00 00`. O backend decodifica (`obdDecoder.js`)
+e segue o fluxo normal (diagnóstico + aviso no Telegram).
+
+```bash
+curl -X POST "https://SEU-APP.onrender.com/obd-raw?token=SUA_SENHA" --data "43 01 30 00 00 00 00"
+```
+
+Defina `OBD_TOKEN` no Render para exigir `?token=...` na URL. Sem isso a rota fica pública.
 
 ## Próximos passos
 
