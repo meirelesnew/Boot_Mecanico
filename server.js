@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const { interpretDTC } = require("./dtcInterpreter");
 const { decodificarModo03, decodificarDadosVivos } = require("./obdDecoder");
+const { criarLimitador } = require("./limitador");
 const {
   configurarWebhook,
   processarUpdate,
@@ -26,6 +27,8 @@ registrarLeituraViva(() => ultimaLeituraViva);
 
 // Temperatura do motor a partir da qual o bot avisa (graus C)
 const TEMP_ALERTA = 105;
+// Com leitura automatica, avisa no maximo 1 vez a cada 5 minutos
+const podeAlertarMotorQuente = criarLimitador(5 * 60 * 1000);
 
 // Protecao opcional por token (?token=...), usada nas rotas do app
 function tokenOk(req) {
@@ -171,10 +174,16 @@ app.post("/obd-live", express.text({ type: "*/*" }), async (req, res) => {
 
   ultimaLeituraViva = { rpm, coolantTemp, speed, timestamp: new Date().toISOString() };
 
-  if (coolantTemp !== null && coolantTemp >= TEMP_ALERTA) {
+  if (coolantTemp !== null && coolantTemp >= TEMP_ALERTA && podeAlertarMotorQuente()) {
     await enviarAlerta(
       `🌡️ *Motor quente!* Temperatura em *${coolantTemp} °C* (limite ${TEMP_ALERTA} °C).\nSe o ponteiro estiver alto, pare em local seguro e deixe esfriar.`
     );
+  }
+
+  // Formato simples pro app: "rpm|temperatura|velocidade" ("--" quando nao ha dado)
+  if (req.query.formato === "csv") {
+    const v = (x) => (x === null ? "--" : String(x));
+    return res.type("text/plain").send(`${v(rpm)}|${v(coolantTemp)}|${v(speed)}`);
   }
 
   const fmt = (v, unid) => (v === null ? "sem dado" : `${v} ${unid}`.trim());

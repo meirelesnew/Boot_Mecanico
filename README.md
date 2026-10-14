@@ -128,8 +128,19 @@ curl -X POST "https://SEU-APP.onrender.com/obd-live?token=SUA_SENHA" --data "41 
 ```
 
 Se a temperatura do motor chegar a **105 °C ou mais**, o bot manda um alerta no Telegram
-(limite ajustável na constante `TEMP_ALERTA` do `server.js`). O app só lê **uma vez por toque**
-no botão; leitura contínua exigiria um temporizador no app.
+(limite ajustável na constante `TEMP_ALERTA` do `server.js`). Pra não encher o chat durante a
+leitura automática, o alerta é limitado a **1 a cada 5 minutos** (`limitador.js`).
+
+**Formato simples:** adicionando `&formato=csv` à URL, a resposta vem como `rpm|temperatura|velocidade`
+(ex: `2104|85|68`, com `--` quando um dado não existe). É o formato usado pelo app com o visual
+em cartões, que mostra cada valor num campo separado.
+
+```bash
+curl -X POST "https://SEU-APP.onrender.com/obd-live?token=SUA_SENHA&formato=csv" --data "41 0C 20 E0|41 05 7D|41 0D 44"
+# 2104|85|68
+```
+
+Leitura em tempo real: o app usa um Temporizador (Clock) que repete a leitura a cada ~2 segundos.
 
 ## Próximos passos
 
