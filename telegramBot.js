@@ -1,5 +1,6 @@
 const TelegramBot = require("node-telegram-bot-api");
 const { perguntarIA, IA_ATIVADA } = require("./openRouterClient");
+const { montarTextoUltimo } = require("./formatadores");
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const WEBHOOK_BASE_URL = process.env.TELEGRAM_WEBHOOK_URL; // ex: https://obd-backend-xxxx.onrender.com
@@ -150,12 +151,7 @@ if (bot) {
       bot.sendMessage(msg.chat.id, "Nenhum registro salvo ainda.");
       return;
     }
-    const texto =
-      `🚗 *Último diagnóstico:*\n` +
-      `*Códigos:* ${registro.codes.join(", ") || "nenhum"}\n` +
-      `*KM:* ${registro.km || "—"}\n` +
-      `*Diagnóstico:* ${registro.resultado.diagnosis}\n` +
-      `*Urgência:* ${registro.resultado.urgency}`;
+    const texto = montarTextoUltimo(registro, perfilFns.getPerfil());
     bot.sendMessage(msg.chat.id, texto, { parse_mode: "Markdown" });
   });
 

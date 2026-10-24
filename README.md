@@ -94,7 +94,7 @@ ative a OpenRouter, que tem modelos gratuitos:
    ```
 3. No Telegram, mande `/start` pro seu bot. Ele salva seu `chat_id` automaticamente e confirma a conexão.
 4. A partir daí:
-   - `/ultimo` → mostra o último diagnóstico
+   - `/ultimo` → mostra o último diagnóstico (data/hora da leitura, KM atual do perfil e, se existia na hora, o KM na leitura)
    - `/km <numero>` → atualiza a quilometragem atual de verdade (ex: `/km 278860`)
    - `/gnv` → marca o carro como equipado com GNV (`/gnv off` desativa)
    - `/obs <texto>` → salva uma observação livre sobre o carro (ex: `/obs pneu dianteiro trocado em ago/2026`)
