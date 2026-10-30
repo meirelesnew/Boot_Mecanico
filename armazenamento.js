@@ -10,9 +10,29 @@
  * continua funcionando so com a memoria (como antes).
  */
 
-const URL_BASE = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
+/**
+ * Aceita a URL do jeito que o painel do Supabase mostra e corrige enganos comuns:
+ * barra no fim e "/rest/v1" colado no endereco (o codigo ja acrescenta esse caminho,
+ * e duplicado o Supabase responde "PGRST125 Invalid path").
+ */
+function normalizarUrl(bruto) {
+  const original = (bruto || "").trim();
+  let url = original.replace(/\/+$/, "");
+  url = url.replace(/\/rest\/v1$/i, "").replace(/\/+$/, "");
+  if (url !== original) {
+    console.warn(`[banco] SUPABASE_URL tinha caminho/barra a mais; usando "${url}". Corrija a variavel para ficar so o endereco.`);
+  }
+  return url;
+}
+
+const URL_BASE = normalizarUrl(process.env.SUPABASE_URL);
 const CHAVE = (process.env.SUPABASE_SECRET_KEY || "").trim();
 const ativo = Boolean(URL_BASE && CHAVE);
+
+if (ativo) {
+  // Mostra so o endereco (nunca a chave) para ajudar a conferir a configuracao nos logs.
+  console.log(`[banco] usando Supabase em ${URL_BASE}`);
+}
 
 function cabecalhos(extra = {}) {
   const h = { apikey: CHAVE, "Content-Type": "application/json", ...extra };
