@@ -1,149 +1,110 @@
-# OBD Backend — Mecânico Pessoal
+# Mecânico Pessoal — backend
 
-Backend que recebe dados de um scanner OBD2 (via app mobile), interpreta códigos de
-erro (DTC) usando uma tabela local gratuita, e opcionalmente usa a OpenRouter (modelos
-gratuitos) para responder perguntas livres via Telegram.
+Backend do sistema que lê o carro por um adaptador **ELM327 (Bluetooth)**, avisa no **Telegram** e controla os gastos com combustível.
 
-## Rodando localmente
-
-```bash
-npm install
-cp .env.example .env   # opcional: preencha OPENROUTER_API_KEY e/ou TELEGRAM_BOT_TOKEN
-npm start
+```
+ELM327 → app (MIT App Inventor) → este backend (Render) → bot do Telegram
+                                        ↓
+                                  Supabase (banco)
 ```
 
-Teste rápido:
+## O que ele faz
 
-```bash
-curl -X POST http://localhost:3000/simulate
+- Decodifica códigos de falha (`P0130`…) e explica em português (tabela local, grátis)
+- Recebe dados ao vivo (RPM, temperatura, velocidade) e alerta se o motor passar de 105 °C
+- Guarda o perfil do carro, o último diagnóstico e os abastecimentos num banco que **não se perde** quando o servidor reinicia
+- Responde perguntas livres no Telegram com IA gratuita (OpenRouter), se configurada
+
+## Variáveis de ambiente
+
+Veja o arquivo `.env.example`. No Render: **Environment → Add Environment Variable**.
+
+| Variável | Para quê |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Token do bot (@BotFather) |
+| `TELEGRAM_WEBHOOK_URL` | Endereço público do serviço no Render |
+| `TELEGRAM_CHAT_ID` | (opcional) Seu chat. Só ele é atendido |
+| `OBD_TOKEN` | Senha das rotas do app (vai em `?token=`) |
+| `SUPABASE_URL` | Endereço do projeto Supabase |
+| `SUPABASE_SECRET_KEY` | Chave **secreta** do Supabase (`sb_secret_...`) |
+| `OPENROUTER_API_KEY` | (opcional) Perguntas livres com IA |
+
+## Banco de dados (Supabase)
+
+1. Crie um projeto em https://supabase.com (plano gratuito)
+2. **SQL Editor** → cole o conteúdo de `supabase.sql` → **Run**
+3. **Project Settings → API Keys**: copie a **Project URL** e a chave **secret** (`sb_secret_...`)
+4. Coloque as duas no Render como `SUPABASE_URL` e `SUPABASE_SECRET_KEY`
+
+As tabelas usam RLS sem políticas: a chave pública não lê nada, só o servidor.
+No plano gratuito o projeto é pausado após 7 dias sem uso; a rota `/health` faz um acesso leve
+por hora, o que evita a pausa enquanto o UptimeRobot estiver ligado.
+
+## Rotas
+
+| Método | Rota | Proteção | Para quê |
+|---|---|---|---|
+| POST | `/obd-raw` | `?token=` | Resposta bruta do comando `03` → decodifica e avisa no Telegram |
+| POST | `/obd-live` | `?token=` | RPM/temperatura/velocidade (`&formato=csv` → `rpm\|temp\|vel`) |
+| POST | `/obd-data` | `?token=` | Dados já decodificados (JSON) |
+| POST | `/simulate` | `?token=` | Simula uma leitura, sem carro |
+| GET | `/ultimo` | `?token=` | Último diagnóstico |
+| GET | `/health` | aberta | Manter o Render acordado (UptimeRobot) |
+| POST | `/telegram/webhook` | segredo do Telegram | Mensagens do bot |
+
+## Comandos do Telegram
+
+`/ajuda` mostra a lista no próprio bot.
+
+| Comando | O que faz |
+|---|---|
+| `/km 281900` | Atualiza a quilometragem |
+| `/gnv` · `/gnv off` | Marca/desmarca GNV no perfil |
+| `/obs texto` | Guarda uma observação |
+| `/perfil` | Mostra o que está salvo |
+| `/ultimo` | Último diagnóstico (data da leitura, KM atual) |
+| `/vivo` | Última leitura de RPM, temperatura e velocidade |
+| `/abastecer gasolina 32,5 6,29` | Registra abastecimento (veja abaixo) |
+| `/combustivel` | Gastos do mês, custo por km, consumo |
+| `/desfazer` | Apaga o último abastecimento |
+| `/status` | Confere banco de dados, IA e tempo ligado |
+
+### Controle de combustível
+
+```
+/abastecer <gasolina|etanol|gnv> <quantidade> <preço> [km281900] [parcial]
+/abastecer gasolina 32,5 6,29
+/abastecer gnv 12 4,89 km281900
+/abastecer etanol 20 4,19 parcial
 ```
 
-## Endpoints
+- Quantidade em litros (m³ no GNV). Sem `km`, usa o KM atual do perfil
+- `parcial` = não encheu o tanque (esse abastecimento não entra no cálculo de consumo)
+- **Custo por km:** gasto dos abastecimentos depois do primeiro ÷ km rodados no período
+- **Consumo:** só entre dois abastecimentos *seguidos*, do *mesmo* combustível e com tanque cheio
+- O OBD2 **não mede** o gasto de GNV (a central só conhece a injeção original), por isso o controle é feito pelos abastecimentos registrados
 
-| Método | Rota         | Descrição                                       |
-|--------|--------------|--------------------------------------------------|
-| POST   | /obd-raw     | Recebe o texto bruto do ELM327 (comando `03`), decodifica e avisa no Telegram |
-| POST   | /obd-live    | Recebe RPM, temperatura e velocidade (comandos `010C`, `0105`, `010D`) |
-| POST   | /obd-data    | Recebe dados já decodificados do scanner (codes, rpm, etc.) |
-| POST   | /simulate    | Roda com dados fictícios, sem hardware           |
-| GET    | /ultimo      | Retorna o último diagnóstico salvo               |
+## Segurança
 
-## Deploy no GitHub
+- Rotas do app exigem `?token=` (`OBD_TOKEN`); sem a variável, o servidor avisa nos logs
+- O webhook do Telegram só aceita chamadas com o segredo que o próprio Telegram devolve
+- O bot só atende **um chat** (o dono). Mensagens de outros chats são ignoradas
+- O repositório é público: **nunca** escreva senhas, tokens ou chaves em arquivos
 
-```bash
-git init
-git add .
-git commit -m "Primeiro commit - backend OBD"
-git branch -M main
-git remote add origin https://github.com/SEU_USUARIO/obd-backend.git
-git push -u origin main
-```
+## Deploy
 
-> Confira que o `.env` NÃO subiu (o `.gitignore` já cuida disso).
+1. GitHub: suba os arquivos do projeto (a pasta `node_modules` e o `.env` ficam de fora, o `.gitignore` já cuida)
+2. Render: Web Service → Build `npm install` → Start `npm start` → variáveis acima
+3. UptimeRobot: monitor HTTP em `https://SEU-APP.onrender.com/health`, a cada 5 minutos
 
-## Deploy no Render
+## Testes
 
-1. Acesse https://render.com e crie uma conta (dá pra logar com GitHub)
-2. **New +** → **Web Service**
-3. Conecte o repositório `obd-backend` que você acabou de subir
-4. Configure:
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-   - **Instance Type:** Free
-5. Em **Environment Variables**, adicione (todas opcionais, exceto se quiser Telegram/IA):
-   - `OPENROUTER_API_KEY` = sua chave da OpenRouter (só se quiser perguntas livres)
-   - `TELEGRAM_BOT_TOKEN` = token do seu bot
-   - `TELEGRAM_WEBHOOK_URL` = a própria URL pública deste serviço no Render
-6. Clique em **Create Web Service**
-
-O Render vai te dar uma URL pública, tipo:
-`https://obd-backend-xxxx.onrender.com`
-
-Essa URL é o que o app React Native vai chamar depois, no lugar de `localhost:3000`.
-
-## Deploy no Railway (alternativa)
-
-1. Acesse https://railway.app e conecte com GitHub
-2. **New Project** → **Deploy from GitHub repo**
-3. Selecione o repositório
-4. Em **Variables**, adicione as mesmas variáveis do Render acima
-5. Railway detecta o `npm start` automaticamente
-
-## Perguntas livres com IA (OpenRouter - grátis)
-
-O `/simulate` e `/obd-data` funcionam 100% sem IA (tabela fixa de códigos DTC). Se quiser
-que o bot também responda perguntas livres no Telegram (ex: "quando devo trocar o óleo?"),
-ative a OpenRouter, que tem modelos gratuitos:
-
-1. Crie uma conta em https://openrouter.ai e gere uma chave em https://openrouter.ai/keys
-2. No `.env` (ou nas variáveis do Render), preencha:
-   - `OPENROUTER_API_KEY` — sua chave
-   - `OPENROUTER_MODEL` — pode deixar `openrouter/free` (escolhe um modelo grátis automaticamente)
-3. Reinicie o servidor
-
-> Modelos gratuitos têm limite de uso (por volta de 20 req/min, 200 req/dia). Pra um assistente pessoal isso é de sobra.
-
-## Configurando o bot do Telegram
-
-1. No `.env` (ou nas variáveis de ambiente do Render), preencha:
-   - `TELEGRAM_BOT_TOKEN` — token que o @BotFather te deu
-   - `TELEGRAM_WEBHOOK_URL` — a URL pública do backend (ex: `https://obd-backend-xxxx.onrender.com`), **sem barra no final**
-2. Suba/reinicie o servidor. Nos logs deve aparecer:
-   ```
-   Webhook do Telegram configurado em: https://.../telegram/webhook
-   ```
-3. No Telegram, mande `/start` pro seu bot. Ele salva seu `chat_id` automaticamente e confirma a conexão.
-4. A partir daí:
-   - `/ultimo` → mostra o último diagnóstico (data/hora da leitura, KM atual do perfil e, se existia na hora, o KM na leitura)
-   - `/km <numero>` → atualiza a quilometragem atual de verdade (ex: `/km 278860`)
-   - `/gnv` → marca o carro como equipado com GNV (`/gnv off` desativa)
-   - `/obs <texto>` → salva uma observação livre sobre o carro (ex: `/obs pneu dianteiro trocado em ago/2026`)
-   - `/vivo` → mostra a última leitura ao vivo (RPM, temperatura, velocidade)
-   - `/perfil` → mostra o que está salvo (GNV + observações)
-   - Qualquer outra mensagem → vai direto pra IA responder
-   - Quando `/obd-data` ou `/simulate` gerar urgência **média ou alta**, o bot te avisa sozinho
-   - Se o carro tiver GNV marcado e aparecer um código de sensor de oxigênio (ex: P0130), o diagnóstico já inclui automaticamente o alerta de possível falso positivo
-
-> ⚠️ O `chat_id` e o perfil do carro (GNV, observações) ficam salvos em memória — se o servidor reiniciar (comum no plano free do Render), essas informações se perdem e você precisa mandar `/start`, `/gnv` e `/obs` de novo. Isso entra na lista de "próximos passos" abaixo, pra resolver com banco de dados.
-
-## Rota /obd-raw (usada pelo app do celular)
-
-O app (feito no MIT App Inventor) manda o texto cru que o ELM327 devolve ao comando `03`,
-por exemplo `SEARCHING... 43 01 30 00 00 00 00`. O backend decodifica (`obdDecoder.js`)
-e segue o fluxo normal (diagnóstico + aviso no Telegram).
-
-```bash
-curl -X POST "https://SEU-APP.onrender.com/obd-raw?token=SUA_SENHA" --data "43 01 30 00 00 00 00"
-```
-
-Defina `OBD_TOKEN` no Render para exigir `?token=...` na URL. Sem isso a rota fica pública.
-
-## Dados ao vivo (/obd-live)
-
-O app manda as 3 respostas do ELM327 separadas por `|`, por exemplo
-`41 0C 0B B8|41 05 84|41 0D 00` (= 750 rpm, 92 °C, 0 km/h):
-
-```bash
-curl -X POST "https://SEU-APP.onrender.com/obd-live?token=SUA_SENHA" --data "41 0C 0B B8|41 05 84|41 0D 00"
-```
-
-Se a temperatura do motor chegar a **105 °C ou mais**, o bot manda um alerta no Telegram
-(limite ajustável na constante `TEMP_ALERTA` do `server.js`). Pra não encher o chat durante a
-leitura automática, o alerta é limitado a **1 a cada 5 minutos** (`limitador.js`).
-
-**Formato simples:** adicionando `&formato=csv` à URL, a resposta vem como `rpm|temperatura|velocidade`
-(ex: `2104|85|68`, com `--` quando um dado não existe). É o formato usado pelo app com o visual
-em cartões, que mostra cada valor num campo separado.
-
-```bash
-curl -X POST "https://SEU-APP.onrender.com/obd-live?token=SUA_SENHA&formato=csv" --data "41 0C 20 E0|41 05 7D|41 0D 44"
-# 2104|85|68
-```
-
-Leitura em tempo real: o app usa um Temporizador (Clock) que repete a leitura a cada ~2 segundos.
+Os testes de integração usaram Supabase e Telegram simulados. Cobrem segurança do webhook, trava de dono,
+comandos, combustível, persistência após reinício, banco fora do ar e modo sem banco.
 
 ## Próximos passos
 
-- [ ] Trocar armazenamento em memória por banco real (ex: SQLite, MongoDB Atlas free tier)
-- [ ] Adicionar autenticação simples no endpoint `/obd-data` (token fixo, pelo menos)
-- [ ] Construir o app React Native que lê o scanner Bluetooth e chama esse backend
+- [ ] App abrir sozinho: conectar ao ELM327 salvo e iniciar a leitura ao vivo
+- [ ] Temperatura em vermelho acima de 100 °C
+- [ ] Histórico de leituras e gráficos
+- [ ] Gerar o APK do app
